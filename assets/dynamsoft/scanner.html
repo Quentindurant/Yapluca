@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YapluCa QR Scanner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #000;
+            overflow: hidden;
+        }
+        #camera-view-container {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+        #scanRegion {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+            border: 2px solid #18cb96;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+        .corner {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-color: #18cb96;
+            border-width: 4px;
+        }
+        #topLeft {
+            top: 0;
+            left: 0;
+            border-top-style: solid;
+            border-left-style: solid;
+        }
+        #topRight {
+            top: 0;
+            right: 0;
+            border-top-style: solid;
+            border-right-style: solid;
+        }
+        #bottomLeft {
+            bottom: 0;
+            left: 0;
+            border-bottom-style: solid;
+            border-left-style: solid;
+        }
+        #bottomRight {
+            bottom: 0;
+            right: 0;
+            border-bottom-style: solid;
+            border-right-style: solid;
+        }
+        #scanLine {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #18cb96;
+            animation: scan 2s infinite ease-in-out;
+        }
+        @keyframes scan {
+            0% { top: 0; }
+            50% { top: calc(100% - 2px); }
+            100% { top: 0; }
+        }
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px;
+            z-index: 20;
+        }
+        #resultContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            display: none;
+        }
+        #resultIcon {
+            font-size: 60px;
+            color: #18cb96;
+            margin-bottom: 20px;
+        }
+        #resultText {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #resultCode {
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #18cb96;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="camera-view-container">
+        <div id="status">Initialisation du scanner...</div>
+        <div id="overlay">
+            <div id="scanRegion">
+                <div class="corner" id="topLeft"></div>
+                <div class="corner" id="topRight"></div>
+                <div class="corner" id="bottomLeft"></div>
+                <div class="corner" id="bottomRight"></div>
+                <div id="scanLine"></div>
+            </div>
+        </div>
+        <div id="resultContainer">
+            <div id="resultIcon">✓</div>
+            <div id="resultText">Code QR scanné avec succès!</div>
+            <div id="resultCode"></div>
+            <button class="btn" id="resetBtn">Scanner à nouveau</button>
+        </div>
+    </div>
+
+    <!-- Charger les scripts Dynamsoft depuis CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/dynamsoft-barcode-reader-bundle@10.4.3100/dist/dbr.bundle.js"></script>
+    
+    <script>
+        // Configuration de la licence Dynamsoft
+        Dynamsoft.License.LicenseManager.initLicense("DLS2eyJoYW5kc2hha2VDb2RlIjoiMTAzOTA1MDU0LVRYbFhaV0pRY205cSIsIm1haW5TZXJ2ZXJVUkwiOiJodHRwczovL21kbHMuZHluYW1zb2Z0b25saW5lLmNvbSIsIm9yZ2FuaXphdGlvbklEIjoiMTAzOTA1MDU0Iiwic3RhbmRieVNlcnZlclVSTCI6Imh0dHBzOi8vc2Rscy5keW5hbXNvZnRvbmxpbmUuY29tIiwiY2hlY2tDb2RlIjoxMjIzNzY1NDIwfQ==");
+        
+        // Préchargement des ressources wasm pour réduire la latence
+        Dynamsoft.Core.CoreModule.loadWasm(["DBR"]);
+        
+        // Variables globales
+        let cameraEnhancer, cvRouter;
+        let hasScanned = false;
+        
+        (async () => {
+            try {
+                // Créer une instance CameraView et CameraEnhancer pour le contrôle de la caméra
+                const cameraView = await Dynamsoft.DCE.CameraView.createInstance();
+                cameraEnhancer = await Dynamsoft.DCE.CameraEnhancer.createInstance(cameraView);
+                
+                // Ajouter l'élément UI au DOM
+                document.querySelector("#camera-view-container").append(cameraView.getUIElement());
+                
+                // Créer une instance CaptureVisionRouter et définir CameraEnhancer comme source d'image
+                cvRouter = await Dynamsoft.CVR.CaptureVisionRouter.createInstance();
+                cvRouter.setInput(cameraEnhancer);
+                
+                // Définir un callback pour les résultats
+                cvRouter.addResultReceiver({
+                    onDecodedBarcodesReceived: (result) => {
+                        if (result.barcodes.length > 0 && !hasScanned) {
+                            const barcode = result.barcodes[0];
+                            hasScanned = true;
+                            
+                            // Afficher le résultat
+                            document.getElementById('resultCode').textContent = "Code: " + barcode.text;
+                            document.getElementById('resultContainer').style.display = 'flex';
+                            
+                            // Envoyer le résultat à Flutter
+                            if (window.flutter_inappwebview) {
+                                window.flutter_inappwebview.callHandler('QRCodeDetected', barcode.text);
+                            } else {
+                                // Méthode alternative pour communiquer avec Flutter
+                                window.parent.postMessage({
+                                    type: 'QR_CODE_DETECTED',
+                                    code: barcode.text
+                                }, '*');
+                            }
+                        }
+                    }
+                });
+                
+                // Configurer les paramètres pour se concentrer sur les QR codes
+                const settings = await cvRouter.getSimplifiedSettings("barcode");
+                settings.barcodeSettings.barcodeFormatIds = Dynamsoft.DBR.EnumBarcodeFormat.BF_QR_CODE;
+                await cvRouter.updateSettings("barcode", settings);
+                
+                // Démarrer la caméra
+                await cameraEnhancer.open();
+                
+                // Démarrer le scan
+                cvRouter.startCapturing("barcode");
+                
+                document.getElementById('status').textContent = 'Scanner prêt. Placez un QR code devant la caméra.';
+                
+            } catch (ex) {
+                document.getElementById('status').textContent = 'Erreur: ' + (ex.message || ex);
+                console.error(ex);
+            }
+        })();
+        
+        // Bouton pour réinitialiser le scanner
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            hasScanned = false;
+            document.getElementById('resultContainer').style.display = 'none';
+        });
+        
+        // Nettoyage lors de la fermeture
+        window.addEventListener('beforeunload', () => {
+            if (cvRouter) {
+                cvRouter.dispose();
+                cvRouter = null;
+            }
+            if (cameraEnhancer) {
+                cameraEnhancer.close();
+                cameraEnhancer = null;
+            }
+        });
+    </script>
+</body>
+</html>

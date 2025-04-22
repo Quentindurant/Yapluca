@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "1058815227110",
+    "project_id": "yapluca-65fcc",
+    "storage_bucket": "yapluca-65fcc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1058815227110:android:2ba983178468cdfa0cf727",
+        "android_client_info": {
+          "package_name": "com.corp.yapluca"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1058815227110-fgg0fh140h2rfd8prcgtjhb2t8n8c3sr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.corp.yapluca",
+            "certificate_hash": "b3c58eff5b5ce58e032736a38932aeb5ece6b034"
+          }
+        },
+        {
+          "client_id": "1058815227110-2le02rej8097ef2ket94n4t477qbshha.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATIjN8ieC_Xph_G2qhoSpXklYMFwzsNGY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1058815227110-2le02rej8097ef2ket94n4t477qbshha.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1058815227110-i74j4vbct3n0jajfg9ve7cuf936nuprv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.yapluca.yapluca"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
