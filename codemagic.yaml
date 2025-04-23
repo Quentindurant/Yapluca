@@ -1,0 +1,28 @@
+workflows:
+  ios-build:
+    name: iOS Build
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+      - name: Set iOS deployment target to 13.0 (for Firebase/Firestore)
+        script: |
+          cd ios
+          if [ -f Podfile ]; then
+            sed -i.bak 's/platform :ios, .*/platform :ios, "13.0"/' Podfile
+          fi
+      - name: Build iOS release
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - "quentin.durant49@orange.fr"
+        notify:
+          success: true
+          failure: true
