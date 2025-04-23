@@ -7,16 +7,6 @@ workflows:
     scripts:
       - name: Flutter pub get
         script: flutter pub get
-      - name: Pré-générer le Podfile (sans build complet)
-        script: |
-          cd ios
-          rm -f Podfile
-          cd ..
-          flutter build ios --no-codesign || true
-      - name: Forcer iOS 13 dans le Podfile
-        script: |
-          cd ios
-          sed -i.bak 's/platform :ios, .*/platform :ios, "13.0"/' Podfile
       - name: Build iOS release
         script: flutter build ios --release --no-codesign
     artifacts:
