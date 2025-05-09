@@ -1,182 +1,107 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:http/http.dart' as http;
 import '../models/charging_station.dart';
 
 class ChargingStationService {
-  // Méthode pour récupérer les stations à proximité
+  // Méthode pour récupérer les stations à proximité depuis l'API réelle
   Future<List<ChargingStation>> getNearbyStations(double latitude, double longitude) async {
-    // Simuler un délai réseau
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    // Dans une vraie application, on ferait une requête API
-    // Pour le développement, on génère des données fictives
-    return _generateMockStations(latitude, longitude);
-  }
-  
-  // Méthode pour récupérer les stations favorites
-  Future<List<ChargingStation>> getFavoriteStations() async {
-    // Simuler un délai réseau
-    await Future.delayed(const Duration(milliseconds: 600));
-    
-    // Dans une vraie application, on récupérerait les favoris depuis une API
-    // Pour le développement, on génère des données fictives
-    return _generateMockFavorites();
-  }
-  
-  // Méthode pour ajouter une station aux favoris
-  Future<void> addToFavorites(String stationId) async {
-    // Simuler un délai réseau
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    // Dans une vraie application, on enverrait une requête à l'API
-    // Pour le développement, on ne fait rien
-    return;
-  }
-  
-  // Méthode pour retirer une station des favoris
-  Future<void> removeFromFavorites(String stationId) async {
-    // Simuler un délai réseau
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    // Dans une vraie application, on enverrait une requête à l'API
-    // Pour le développement, on ne fait rien
-    return;
-  }
-  
-  // Méthode pour générer des stations fictives
-  List<ChargingStation> _generateMockStations(double latitude, double longitude) {
-    final random = Random();
-    final List<ChargingStation> stations = [];
-    
-    // Noms de lieux parisiens
-    final List<String> placeNames = [
-      'Café de Paris',
-      'Bistro Eiffel',
-      'Galeries Lafayette',
-      'Le Marais Shop',
-      'Montmartre Café',
-      'Louvre Museum',
-      'Notre Dame Plaza',
-      'Champs-Élysées',
-      'Saint-Germain',
-      'Opéra Garnier',
+    // Appel à l'API chargenow.top pour récupérer les bornes réelles
+    const username = 'MaximeRiviere';
+    const password = 'MR!2025';
+    final basicAuth = 'Basic ' + base64Encode(utf8.encode('$username:$password'));
+    // TODO: Remplacer par l'endpoint qui liste toutes les bornes si disponible
+    // Ici, exemple avec un seul deviceId (à généraliser si besoin)
+    final deviceIds = [
+      'BJD60151', // Ajoute ici tous les deviceId connus
     ];
-    
-    // Adresses parisiennes
-    final List<String> addresses = [
-      '15 Rue de Rivoli, 75001 Paris',
-      '27 Avenue des Champs-Élysées, 75008 Paris',
-      '8 Boulevard Haussmann, 75009 Paris',
-      '35 Rue du Faubourg Saint-Honoré, 75008 Paris',
-      '22 Rue Montorgueil, 75001 Paris',
-      '1 Place du Trocadéro, 75016 Paris',
-      '6 Place Saint-Michel, 75006 Paris',
-      '12 Rue de la Paix, 75002 Paris',
-      '44 Rue de Rivoli, 75004 Paris',
-      '3 Boulevard Saint-Germain, 75005 Paris',
-    ];
-    
-    // Générer entre 3 et 8 stations
-    final count = random.nextInt(6) + 3;
-    
-    for (int i = 0; i < count; i++) {
-      // Générer un ID unique
-      final id = 'station_${DateTime.now().millisecondsSinceEpoch}_$i';
-      
-      // Choisir un nom et une adresse aléatoires
-      final name = placeNames[random.nextInt(placeNames.length)];
-      final address = addresses[random.nextInt(addresses.length)];
-      
-      // Générer des coordonnées proches de la position donnée
-      final lat = latitude + (random.nextDouble() - 0.5) * 0.02;
-      final lng = longitude + (random.nextDouble() - 0.5) * 0.02;
-      
-      // Générer des valeurs aléatoires pour les batteries
-      final totalBatteries = random.nextInt(6) + 5; // Entre 5 et 10 batteries
-      final availableBatteries = random.nextInt(totalBatteries + 1); // Entre 0 et totalBatteries
-      
-      // Créer la station
-      final station = ChargingStation(
-        id: id,
-        name: name,
-        address: address,
-        latitude: lat,
-        longitude: lng,
-        totalBatteries: totalBatteries,
-        availability: availableBatteries,
-        isOpen: random.nextBool(),
-        openingHours: '9:00 - 22:00',
-        imageUrl: 'https://picsum.photos/200/300?random=$i',
-      );
-      
-      stations.add(station);
+    List<ChargingStation> stations = [];
+    for (final deviceId in deviceIds) {
+      final url = Uri.parse('https://developer.chargenow.top/cdb-open-api/v1/rent/cabinet/query?deviceId=$deviceId');
+      final response = await http.get(url, headers: {'Authorization': basicAuth});
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['code'] == 0 && data['data'] != null) {
+          final cabinet = data['data']['cabinet'];
+          final shop = data['data']['shop'];
+          final totalBatteries = data['data']['cabinet']['slots'] ?? 0;
+          final availableBatteries = data['data']['cabinet']['emptySlots'] ?? 0;
+          stations.add(ChargingStation(
+            id: cabinet['id'] ?? deviceId,
+            name: shop['name'] ?? 'Borne $deviceId',
+            address: shop['address'] ?? '',
+            latitude: double.tryParse(shop['latitude'] ?? '') ?? 0.0,
+            longitude: double.tryParse(shop['longitude'] ?? '') ?? 0.0,
+            totalBatteries: totalBatteries,
+            availability: availableBatteries,
+            isOpen: cabinet['online'] ?? true,
+            openingHours: shop['openingTime'],
+            imageUrl: shop['logo'],
+          ));
+        }
+      }
     }
-    
     return stations;
   }
-  
-  // Méthode pour générer des favoris fictifs
-  List<ChargingStation> _generateMockFavorites() {
-    final random = Random();
-    final List<ChargingStation> favorites = [];
-    
-    // Noms de lieux parisiens favoris
-    final List<String> favoriteNames = [
-      'Mon Bureau',
-      'Café Préféré',
-      'Salle de Sport',
-      'Restaurant Favori',
-    ];
-    
-    // Adresses parisiennes
-    final List<String> addresses = [
-      '15 Rue de Rivoli, 75001 Paris',
-      '27 Avenue des Champs-Élysées, 75008 Paris',
-      '8 Boulevard Haussmann, 75009 Paris',
-      '35 Rue du Faubourg Saint-Honoré, 75008 Paris',
-    ];
-    
-    // Coordonnées parisiennes
-    final List<List<double>> coordinates = [
-      [48.856614, 2.3522219],
-      [48.858844, 2.2943506],
-      [48.873792, 2.3298169],
-      [48.863692, 2.3380449],
-    ];
-    
-    // Générer entre 2 et 4 favoris
-    final count = random.nextInt(3) + 2;
-    
-    for (int i = 0; i < count; i++) {
-      // Générer un ID unique
-      final id = 'favorite_${DateTime.now().millisecondsSinceEpoch}_$i';
-      
-      // Choisir un nom et une adresse
-      final name = favoriteNames[i % favoriteNames.length];
-      final address = addresses[i % addresses.length];
-      final coords = coordinates[i % coordinates.length];
-      
-      // Générer des valeurs aléatoires pour les batteries
-      final totalBatteries = random.nextInt(6) + 5; // Entre 5 et 10 batteries
-      final availableBatteries = random.nextInt(totalBatteries + 1); // Entre 0 et totalBatteries
-      
-      // Créer la station
-      final station = ChargingStation(
-        id: id,
-        name: name,
-        address: address,
-        latitude: coords[0],
-        longitude: coords[1],
-        totalBatteries: totalBatteries,
-        availability: availableBatteries,
-        isOpen: true,
-        openingHours: '9:00 - 22:00',
-        imageUrl: 'https://picsum.photos/200/300?random=${i+10}',
-      );
-      
-      favorites.add(station);
+
+  // Méthode pour récupérer toutes les stations depuis l'API
+  Future<List<ChargingStation>> getAllStations() async {
+    const username = 'MaximeRiviere';
+    const password = 'MR!2025';
+    final basicAuth = 'Basic ' + base64Encode(utf8.encode('$username:$password'));
+    final url = Uri.parse('https://developer.chargenow.top/cdb-open-api/v1/cabinet/getAllDevice');
+    final response = await http.get(url, headers: {'Authorization': basicAuth});
+    List<ChargingStation> stations = [];
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['code'] == 0 && data['data'] != null) {
+        for (final device in data['data']) {
+          final deviceId = device['pCabinetid'];
+          // Appel à l'endpoint de détail pour chaque borne
+          final detailUrl = Uri.parse('https://developer.chargenow.top/cdb-open-api/v1/rent/cabinet/query?deviceId=$deviceId');
+          final detailResp = await http.get(detailUrl, headers: {'Authorization': basicAuth});
+          if (detailResp.statusCode == 200) {
+            final detailData = json.decode(detailResp.body);
+            if (detailData['code'] == 0 && detailData['data'] != null) {
+              final cabinet = detailData['data']['cabinet'];
+              final shop = detailData['data']['shop'];
+              final totalBatteries = cabinet['slots'] ?? 0;
+              final availableBatteries = cabinet['emptySlots'] ?? 0;
+              stations.add(ChargingStation(
+                id: cabinet['id'] ?? deviceId,
+                name: shop['name'] ?? 'Borne $deviceId',
+                address: shop['address'] ?? '',
+                latitude: double.tryParse(shop['latitude'] ?? '') ?? 0.0,
+                longitude: double.tryParse(shop['longitude'] ?? '') ?? 0.0,
+                totalBatteries: totalBatteries,
+                availability: availableBatteries,
+                isOpen: cabinet['online'] ?? true,
+                openingHours: shop['openingTime'],
+                imageUrl: shop['logo'],
+              ));
+            }
+          }
+        }
+      }
     }
-    
-    return favorites;
+    return stations;
+  }
+
+  // Méthode pour récupérer les stations favorites (désactivée, car plus de données fictives)
+  Future<List<ChargingStation>> getFavoriteStations() async {
+    // Optionnel : tu peux implémenter une vraie API pour les favoris ici
+    return [];
+  }
+
+  // Méthode pour ajouter une station aux favoris (à implémenter avec l'API réelle si besoin)
+  Future<void> addToFavorites(String stationId) async {
+    // À implémenter avec l'API réelle
+    return;
+  }
+
+  // Méthode pour retirer une station des favoris (à implémenter avec l'API réelle si besoin)
+  Future<void> removeFromFavorites(String stationId) async {
+    // À implémenter avec l'API réelle
+    return;
   }
 }

@@ -5,6 +5,7 @@ import '../../config/app_theme.dart';
 import '../../data/models/charging_station.dart';
 import '../../data/services/charging_station_service.dart';
 import '../../routes/app_router.dart';
+import '../widgets/stripe_payment_button.dart';
 
 /// Écran de détails d'une borne de recharge
 class StationDetailsScreen extends StatefulWidget {
@@ -367,6 +368,14 @@ class _StationDetailsScreenState extends State<StationDetailsScreen> with Single
                         disabledBackgroundColor: AppColors.error.withOpacity(0.6),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Bouton Stripe Payment
+                  StripePaymentButton(
+                    amount: 299, // Exemple : 2,99€
+                    productName: _station!.name,
+                    successUrl: 'https://yapluca-success.com',
+                    cancelUrl: 'https://yapluca-cancel.com',
                   ),
                   const SizedBox(height: 20),
                 ],

@@ -7,6 +7,7 @@ import 'package:yapluca_migration/presentation/widgets/primary_button.dart';
 import 'package:yapluca_migration/presentation/widgets/yapluca_logo.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../routes/app_router.dart'; // Correction du chemin d'import AppRouter
+import '../screens/add_balance_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -254,7 +255,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(height: 4),
                               TextButton(
                                 onPressed: () {
-                                  // Naviguer vers l'écran d'ajout de crédit
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => AddBalanceScreen(
+                                        currentBalance: userData?.balance ?? 0.0,
+                                      ),
+                                    ),
+                                  );
                                 },
                                 style: TextButton.styleFrom(
                                   padding: EdgeInsets.zero,
