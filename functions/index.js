@@ -8,7 +8,7 @@ admin.initializeApp();
 
 // Fonction pour créer une session Stripe Checkout (avec metadata userId)
 exports.createStripeCheckoutSession = functions
-  .region('us-central1')
+  .region('europe-west9')
   .https.onCall(async (data, context) => {
     const { amount, productName, successUrl, cancelUrl } = data;
     const userId = context.auth?.uid;
