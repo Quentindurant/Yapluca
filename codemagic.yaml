@@ -3,7 +3,7 @@ workflows:
     name: iOS Build
     environment:
       groups:
-        - yapluCa
+        - YapluCa
       xcode: latest
       cocoapods: default
     scripts:
