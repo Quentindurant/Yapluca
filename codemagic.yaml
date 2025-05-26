@@ -8,6 +8,11 @@ workflows:
       - name: Flutter pub get
         script: flutter pub get
       - name: Build iOS release
-        script: flutter build ios
+        script: flutter build ios --release
     artifacts:
       - build/ios/ipa/*.ipa
+    code_signing:
+      certificates:
+        - YapluCa.p12
+      provisioning_profiles:
+        - YapluCaProvisioning.mobileprovision
