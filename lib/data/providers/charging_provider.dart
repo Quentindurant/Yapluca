@@ -59,38 +59,20 @@ class ChargingProvider with ChangeNotifier {
         _errorMessage = response.msg ?? 'Failed to fetch cabinets';
         debugPrint('ChargingProvider: Error fetching cabinets - $_errorMessage');
         
-        // Créer des données fictives pour le débogage si l'API échoue
-        _createMockCabinets();
+        // Ne plus injecter de bornes fictives. La liste reste vide en cas d'échec.
       }
     } catch (e) {
       _errorMessage = 'Error: $e';
       debugPrint('ChargingProvider: Exception in fetchCabinets - $_errorMessage');
       
-      // Créer des données fictives pour le débogage si l'API échoue
-      _createMockCabinets();
+
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
   
-  // Créer des données fictives pour le débogage
-  void _createMockCabinets() {
-    debugPrint('ChargingProvider: Creating mock cabinets for debugging');
-    _cabinets = List.generate(5, (index) => Cabinet(
-      id: 'mock-cabinet-$index',
-      remark: 'Borne de test $index',
-      type: 'Standard',
-      slots: 10,
-      qrCode: 'mock-qr-$index',
-      online: true,
-      emptySlots: 5,
-      busySlots: 5,
-      shopId: 'mock-shop-$index',
-      signal: 'Good',
-    ));
-    debugPrint('ChargingProvider: Created ${_cabinets.length} mock cabinets');
-  }
+
   
   // Fetch device info by device ID
   Future<void> fetchDeviceInfo(String deviceId) async {
@@ -123,47 +105,20 @@ class ChargingProvider with ChangeNotifier {
         _errorMessage = response.msg ?? 'Failed to fetch device info';
         debugPrint('ChargingProvider: Error fetching device info - $_errorMessage');
         
-        // Créer des données fictives pour le débogage si l'API échoue
-        _createMockDeviceInfo(deviceId);
+
       }
     } catch (e) {
       _errorMessage = 'Error: $e';
       debugPrint('ChargingProvider: Exception in fetchDeviceInfo - $_errorMessage');
       
-      // Créer des données fictives pour le débogage si l'API échoue
-      _createMockDeviceInfo(deviceId);
+
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
   
-  // Créer des données fictives de device info pour le débogage
-  void _createMockDeviceInfo(String deviceId) {
-    debugPrint('ChargingProvider: Creating mock device info for debugging');
-    
-    final mockCabinet = Cabinet(
-      id: deviceId,
-      remark: 'Borne de test',
-      type: 'Standard',
-      slots: 10,
-      qrCode: deviceId,
-      online: true,
-      emptySlots: 5,
-      busySlots: 5,
-      shopId: 'mock-shop',
-      signal: 'Good',
-    );
-    
-    _currentDeviceInfo = DeviceInfo(
-      cabinet: mockCabinet,
-      shop: null,
-      batteries: [],
-      priceStrategy: null,
-    );
-    
-    debugPrint('ChargingProvider: Created mock device info');
-  }
+
   
   // Create rent order
   Future<Map<String, dynamic>?> createRentOrder(String deviceId, int slotNum) async {

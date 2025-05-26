@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "yapluca-65fcc"
-  }
+    "default": "yapluca-65fcc",
+    "yapluca": "yapluca-65fcc"
+  },
+  "targets": {},
+  "etags": {}
 }

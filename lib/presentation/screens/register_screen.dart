@@ -22,7 +22,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirmPassword = true;
   bool _acceptTerms = false;
   bool _isLoading = false;
-  String _errorMessage = '';
+  String? _errorMessage;
+  String? _emailError = '';
+
+  bool _formValid() {
+    return _emailController.text.isNotEmpty &&
+        _passwordController.text.isNotEmpty &&
+        _nameController.text.isNotEmpty &&
+        !_isLoading;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
@@ -58,19 +71,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
           _passwordController.text.trim(),
           _nameController.text.trim(),
         );
-        
+
         if (mounted && authProvider.isAuthenticated) {
           Navigator.pushReplacementNamed(context, '/home');
         } else if (mounted) {
           setState(() {
-            _errorMessage = authProvider.error;
+            if (authProvider.error.contains('email-already-in-use')) {
+              _errorMessage = "Cet email est déjà utilisé. Essayez de vous connecter ou utilisez un autre email.";
+              _emailError = _errorMessage;
+            } else {
+              _errorMessage = authProvider.error.isNotEmpty
+                  ? authProvider.error
+                  : "Une erreur est survenue lors de l'inscription. Veuillez réessayer.";
+              _emailError = null;
+            }
           });
+          if (_errorMessage?.isNotEmpty == true) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(_errorMessage!),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       } catch (e) {
         if (mounted) {
           setState(() {
             _errorMessage = e.toString();
           });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_errorMessage!),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       } finally {
         if (mounted) {
@@ -101,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_errorMessage),
+            content: Text(_errorMessage!),
             backgroundColor: Colors.red,
           ),
         );
@@ -114,7 +149,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_errorMessage),
+            content: Text(_errorMessage!),
             backgroundColor: Colors.red,
           ),
         );
@@ -218,13 +253,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           // Champ Email
                           TextFormField(
                             controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
                             decoration: InputDecoration(
-                              hintText: 'Email',
+                              labelText: 'Email',
+                              errorText: _emailError,
                               prefixIcon: const Icon(Icons.email, color: AppColors.primaryColor),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.grey.shade300),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
@@ -238,12 +272,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               fillColor: const Color(0xFFF8F8F8),
                               contentPadding: const EdgeInsets.symmetric(vertical: 15),
                             ),
+                            keyboardType: TextInputType.emailAddress,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Veuillez entrer votre email';
                               }
-                              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                                return 'Veuillez entrer un email valide';
+                              if (!value.contains('@')) {
+                                return 'Format d\'email invalide';
                               }
                               return null;
                             },
@@ -376,7 +411,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _register,
+                              onPressed: _isLoading || !_formValid() ? null : _register,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primaryColor,
                                 foregroundColor: Colors.white,

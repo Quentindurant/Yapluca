@@ -111,17 +111,28 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacementNamed(context, '/home');
       } else if (mounted) {
         setState(() {
-          _errorMessage = authProvider.error.isNotEmpty 
-              ? authProvider.error 
-              : 'Échec de la connexion Google';
+          if (authProvider.error.contains('404')) {
+            _errorMessage = "Erreur technique lors de la connexion Google (404). Le service d'authentification est momentanément indisponible. Veuillez réessayer plus tard ou contacter le support.";
+          } else if (authProvider.error.isNotEmpty) {
+            _errorMessage = authProvider.error;
+          } else {
+            _errorMessage = 'Échec de la connexion Google. Veuillez vérifier votre connexion internet ou réessayer.';
+          }
         });
-        
+
         print('Erreur de connexion: $_errorMessage');
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(_errorMessage),
             backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Support',
+              textColor: Colors.white,
+              onPressed: () {
+                Navigator.pushNamed(context, '/support');
+              },
+            ),
           ),
         );
       }

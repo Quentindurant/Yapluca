@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class StripePaymentButton extends StatefulWidget {
@@ -24,22 +25,44 @@ class _StripePaymentButtonState extends State<StripePaymentButton> {
   bool _loading = false;
 
   Future<void> _startStripeCheckout() async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Veuillez vous connecter pour ajouter du crédit !")),
+      );
+      return;
+    }
+    // DEBUG : log utilisateur et token Firebase
+    print("[DEBUG] Firebase user: "+FirebaseAuth.instance.currentUser.toString());
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    print("[DEBUG] Firebase token: $token");
+    if (FirebaseAuth.instance.currentUser == null || token == null) {
+      print('[DEBUG] Utilisateur non connecté ou token manquant');
+    } else {
+      print('[DEBUG] Utilisateur connecté, token présent');
+    }
     setState(() { _loading = true; });
     try {
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createStripeCheckoutSession');
-      final response = await callable.call({
-        'amount': widget.amount,
-        'productName': widget.productName,
-        // Utilise une URL temporaire valide Stripe (à remplacer par une page de redirection custom plus tard)
-        'successUrl': 'https://yapluca-success.com',
-        'cancelUrl': 'https://yapluca-cancel.com',
-      });
-      final url = response.data['url'];
-      if (url != null && await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      } else {
+      final HttpsCallable callable = FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('createStripeCheckoutSession');
+      print('[DEBUG] Appel FirebaseFunctions...');
+      try {
+        final response = await callable.call({
+          'amount': widget.amount,
+          'currency': 'eur',
+        });
+        print('[DEBUG] Réponse FirebaseFunctions: ' + response.data.toString());
+        final url = response.data['url'];
+        if (url != null && await canLaunchUrl(Uri.parse(url))) {
+          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Impossible d\'ouvrir la page de paiement Stripe.')),
+          );
+        }
+      } catch (e) {
+        print('[DEBUG] Erreur lors de l\'appel FirebaseFunctions: ' + e.toString());
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible d\'ouvrir la page de paiement Stripe.')),
+          SnackBar(content: Text('Erreur lors de la création du paiement : $e')),
         );
       }
     } catch (e) {

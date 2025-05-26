@@ -58,9 +58,8 @@ class ChargingStationService {
       }
     } catch (e) {
       print('Erreur lors de la récupération des bornes: $e');
-      // En cas d'erreur, retourner des bornes fictives pour le développement
-      print('Utilisation des données fictives');
-      return _getMockStations();
+      // Ne plus retourner de bornes fictives en production
+      return []; // ou throw e; si tu veux afficher une erreur à l'utilisateur
     }
   }
   
@@ -94,12 +93,8 @@ class ChargingStationService {
       }
     } catch (e) {
       print('Erreur lors de la récupération de la borne: $e');
-      // En cas d'erreur, retourner une borne fictive pour le développement
-      print('Utilisation des données fictives pour la borne $deviceId');
-      return _getMockStations().firstWhere(
-        (station) => station.id == deviceId,
-        orElse: () => _getMockStations().first,
-      );
+      // Ne plus retourner de borne fictive en production
+      throw Exception('Impossible de récupérer la borne $deviceId');
     }
   }
   
@@ -121,21 +116,7 @@ class ChargingStationService {
       }).toList();
     } catch (e) {
       print('Erreur lors de la récupération des bornes à proximité: $e');
-      // En cas d'erreur, filtrer les données fictives par proximité
-      final mockStations = _getMockStations();
-      
-      // Trier les stations par distance
-      mockStations.sort((a, b) {
-        final distanceA = a.calculateDistance(latitude, longitude);
-        final distanceB = b.calculateDistance(latitude, longitude);
-        return distanceA.compareTo(distanceB);
-      });
-      
-      // Filtrer les stations dans le rayon spécifié
-      return mockStations.where((station) {
-        final distance = station.calculateDistance(latitude, longitude);
-        return distance <= radiusInKm;
-      }).toList();
+      return [];
     }
   }
   

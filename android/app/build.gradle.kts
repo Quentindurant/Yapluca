@@ -6,6 +6,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+
 android {
     namespace = "com.corp.yapluca"
     compileSdk = flutter.compileSdkVersion
@@ -31,18 +39,34 @@ android {
         versionName = flutter.versionName
     }
 
+    // --- Ajout config signature release ---
+    signingConfigs {
+
+        create("release") {
+            storeFile = file(keystoreProperties["storeFile"] ?: "key.jks")
+            storePassword = keystoreProperties["storePassword"] as String?
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:33.12.0"))
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-analytics")
+    // Ajout pour App Check Play Integrity
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
 }
 
 flutter {

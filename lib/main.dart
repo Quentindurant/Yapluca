@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'config/app_colors.dart';
 import 'config/app_theme.dart';
 import 'config/app_config.dart';
@@ -37,6 +38,37 @@ void customizeGoogleSignIn() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Initialiser Firebase
+  try {
+    await Firebase.initializeApp(
+      options: FirebaseConfig.platformOptions,
+    );
+
+    // ⚠️ Activation App Check Play Integrity : doit être juste après Firebase.initializeApp et AVANT tout autre code Firebase !
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.playIntegrity, // Token accepté par Firebase
+      appleProvider: AppleProvider.debug, // Laisse debug si tu ne testes pas sur iOS
+    );
+    print('Firebase App Check activé avec Play Integrity');
+
+    isFirebaseAvailable = true;
+    print('Firebase initialisé avec succès');
+
+    // Initialiser l'authentification pour restaurer la session si possible
+    final authService = AuthService();
+    await authService.initAuth();
+    
+  } catch (e) {
+    isFirebaseAvailable = false;
+    print('Erreur lors de l\'initialisation de Firebase: $e');
+    
+    // Afficher plus de détails sur l'erreur pour le débogage
+    if (e is FirebaseException) {
+      print('Code d\'erreur Firebase: ${e.code}');
+      print('Message d\'erreur Firebase: ${e.message}');
+    }
+  }
+  
   // Fixer l'orientation de l'application en mode portrait
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -60,29 +92,7 @@ void main() async {
     print('Erreur lors de la personnalisation de Google Sign-In: $e');
   }
   
-  // Initialiser Firebase
-  try {
-    await Firebase.initializeApp(
-      options: FirebaseConfig.platformOptions,
-    );
-    
-    isFirebaseAvailable = true;
-    print('Firebase initialisé avec succès');
-    
-    // Initialiser l'authentification pour restaurer la session si possible
-    final authService = AuthService();
-    await authService.initAuth();
-    
-  } catch (e) {
-    isFirebaseAvailable = false;
-    print('Erreur lors de l\'initialisation de Firebase: $e');
-    
-    // Afficher plus de détails sur l'erreur pour le débogage
-    if (e is FirebaseException) {
-      print('Code d\'erreur Firebase: ${e.code}');
-      print('Message d\'erreur Firebase: ${e.message}');
-    }
-  }
+
   
   runApp(const MyApp());
 }

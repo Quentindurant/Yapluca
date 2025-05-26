@@ -13,7 +13,7 @@ class AuthService {
   FirebaseFirestore? _firestore;
   
   // Mode de secours si Firebase n'est pas disponible
-  bool _useLocalMode = true;
+  bool _useLocalMode = false;
   app_models.User? _mockUser;
   bool _isLoggedIn = false;
   final List<app_models.User> _registeredUsers = [];
