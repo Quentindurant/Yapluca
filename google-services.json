@@ -15,11 +15,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "1058815227110-fgg0fh140h2rfd8prcgtjhb2t8n8c3sr.apps.googleusercontent.com",
+          "client_id": "1058815227110-c82rnv8fdn52jf75bqi9qkm0co1atepi.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.corp.yapluca",
-            "certificate_hash": "b3c58eff5b5ce58e032736a38932aeb5ece6b034"
+            "certificate_hash": "d775c2178ec94d60e2b0766220f115d75e69fc81"
           }
         },
         {

@@ -3,22 +3,24 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:ui' as ui;
+
 import '../../config/app_colors.dart';
 import '../../models/charging_station.dart';
 import '../../providers/charging_station_provider.dart';
 import '../../data/providers/charging_provider.dart';
-import '../../data/models/cabinet_model.dart';
 import '../../data/services/location_service.dart';
 import '../../utils/auth_utils.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/yapluca_logo.dart';
-import '../../routes/app_router.dart'; // Correction du chemin d'import AppRouter
+import '../../routes/app_router.dart';
 
-/// Fournisseur de tuiles de carte avec mise en cache pour de meilleures performances
 class CachedNetworkTileProvider extends TileProvider {
   final BaseCacheManager _cacheManager;
 
@@ -28,7 +30,6 @@ class CachedNetworkTileProvider extends TileProvider {
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     final url = getTileUrl(coordinates, options);
-    
     return NetworkImage(url);
   }
 
@@ -37,57 +38,56 @@ class CachedNetworkTileProvider extends TileProvider {
     final x = coordinates.x;
     final y = coordinates.y;
     final r = options.additionalOptions['r'] ?? '';
-    
-    String url = '';
-    if (options.urlTemplate != null) {
-      url = options.urlTemplate!
-          .replaceAll('{z}', z.toString())
-          .replaceAll('{x}', x.toString())
-          .replaceAll('{y}', y.toString())
-          .replaceAll('{r}', r);
-    } else {
-      // URL de secours si urlTemplate est null
-      url = 'https://tile.openstreetmap.org/$z/$x/$y.png'
-          .replaceAll('$z', z.toString())
-          .replaceAll('$x', x.toString())
-          .replaceAll('$y', y.toString());
-    }
-    
+    var url = options.urlTemplate!
+        .replaceAll('{z}', z.toString())
+        .replaceAll('{x}', x.toString())
+        .replaceAll('{y}', y.toString())
+        .replaceAll('{r}', r);
+
     final subdomains = options.subdomains;
     if (subdomains.isNotEmpty) {
       final index = (x + y) % subdomains.length;
-      return url.replaceAll('{s}', subdomains[index]);
+      url = url.replaceAll('{s}', subdomains[index]);
     }
-    
     return url;
   }
 }
 
 class MapScreen extends StatefulWidget {
   const MapScreen({Key? key}) : super(key: key);
-
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
 class _MapScreenState extends State<MapScreen> {
+  double? _heading;
+  @override
+  void initState() {
+    super.initState();
+    FlutterCompass.events?.listen((event) {
+      setState(() {
+        _heading = event.heading;
+      });
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!context.checkAuth()) return;
+      await _askLocationPermission();
+      await _getCurrentLocation();
+      Provider.of<ChargingStationProvider>(context, listen: false).fetchNearbyStations();
+      Provider.of<ChargingProvider>(context, listen: false).fetchCabinets();
+    });
+  }
   final MapController _mapController = MapController();
-  int _currentIndex = 1;
+  final TextEditingController _searchController = TextEditingController();
+
   Position? _currentPosition;
   ChargingStation? _selectedStation;
-  String _searchQuery = '';
-  TextEditingController _searchController = TextEditingController();
-  List<String> _recentSearches = [
-    'Tour Eiffel, 75007 Paris',
-    '1 rue de Rivoli, 75001 Paris',
-  ];
-  bool _isLoading = false;
-  String? _locationError;
-
-  // Ajouter une variable pour le style de carte
   String _currentMapStyle = 'light';
+  List<LatLng> _routePoints = [];
+  String? _routeError;
+  bool _isLoading = false;
+  int _currentIndex = 1;
 
-  // Définir les différents styles de carte disponibles
   final Map<String, String> _mapStyles = {
     'standard': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     'light': 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
@@ -97,119 +97,54 @@ class _MapScreenState extends State<MapScreen> {
     'watercolor': 'https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',
   };
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Vérifier si l'utilisateur est authentifié
-      if (!context.checkAuth()) {
-        return; // Ne pas continuer si l'utilisateur n'est pas authentifié
-      }
-      await _askLocationPermission();
-      _getCurrentLocation();
-      Provider.of<ChargingStationProvider>(context, listen: false).fetchNearbyStations();
-      // Charger les bornes réelles depuis l'API
-      Provider.of<ChargingProvider>(context, listen: false).fetchCabinets();
-    });
-  }
+  
 
   Future<void> _askLocationPermission() async {
-    var status = await Permission.location.request();
-    if (status.isGranted) {
-      // Permission accordée, rien à faire de plus
-    } else if (status.isDenied) {
-      // Permission refusée, tu peux afficher un message ou proposer d'ouvrir les paramètres
+    final status = await Permission.location.request();
+    if (status.isDenied || status.isPermanentlyDenied) {
       _showLocationPermissionDialog();
-    } else if (status.isPermanentlyDenied) {
-      // L'utilisateur a refusé définitivement la permission
-      openAppSettings();
     }
   }
 
-  /// Demande la permission de géolocalisation et récupère la position actuelle
   Future<void> _getCurrentLocation() async {
-    setState(() {
-      _isLoading = true;
-      _locationError = null;
-    });
+    final locationService = LocationService();
+    setState(() => _isLoading = true);
 
     try {
-      // Importer le service de localisation
-      final locationService = LocationService();
-
-      // Vérifier les permissions d'abord
-      bool hasPermissions = await locationService.checkAndRequestPermissions();
+      final hasPermissions = await locationService.checkAndRequestPermissions();
       if (!hasPermissions) {
-        setState(() {
-          _locationError = 'Permissions de localisation non accordées';
-          _isLoading = false;
-        });
-        
-        // Afficher un dialogue pour guider l'utilisateur
         _showLocationPermissionDialog();
+        _useDefaultPosition();
         return;
       }
 
-      // Utiliser la stratégie optimisée du service de localisation
-      Position? position = await locationService.getCurrentPosition(
-        onPositionUpdate: (Position updatedPosition) {
-          // Cette fonction sera appelée deux fois potentiellement:
-          // 1. D'abord avec la dernière position connue (rapide mais moins précise)
-          // 2. Ensuite avec la position actuelle précise (plus lente mais plus précise)
+      final position = await locationService.getCurrentPosition(
+        onPositionUpdate: (pos) {
           setState(() {
-            _currentPosition = updatedPosition;
-            _mapController.move(
-              LatLng(updatedPosition.latitude, updatedPosition.longitude),
-              15.0,
-            );
+            _currentPosition = pos;
+            _mapController.move(LatLng(pos.latitude, pos.longitude), 15);
             _isLoading = false;
           });
-          
-          // Charger les stations à proximité à chaque mise à jour de position
-          _loadNearbyStations(updatedPosition.latitude, updatedPosition.longitude);
         },
       );
 
-      // Si nous avons une position initiale (sans callback), l'utiliser
-      if (position != null && _currentPosition == null) {
+      if (position != null) {
         setState(() {
           _currentPosition = position;
-          _mapController.move(
-            LatLng(position.latitude, position.longitude),
-            15.0,
-          );
+          _mapController.move(LatLng(position.latitude, position.longitude), 15);
           _isLoading = false;
         });
-        
-        // Charger les stations à proximité
-        _loadNearbyStations(position.latitude, position.longitude);
-      } else if (position == null && _currentPosition == null) {
-        // Si aucune position n'a été obtenue, utiliser la position par défaut
-        setState(() {
-          _locationError = 'Impossible d\'obtenir votre position. Utilisation d\'une position par défaut.';
-          _isLoading = false;
-        });
-        
+      } else {
         _useDefaultPosition();
       }
     } catch (e) {
-      setState(() {
-        _locationError = 'Erreur lors de la récupération de la position: $e';
-        _isLoading = false;
-      });
-      print('Erreur de géolocalisation: $e');
-      
-      // En cas d'erreur, utiliser une position par défaut
       _useDefaultPosition();
     }
   }
 
-  /// Méthode pour utiliser une position par défaut (Paris)
   void _useDefaultPosition() {
-    // Coordonnées de Paris
-    double defaultLat = 48.8566;
-    double defaultLng = 2.3522;
-    
+    final defaultLat = 48.8566;
+    final defaultLng = 2.3522;
     setState(() {
       _currentPosition = Position(
         latitude: defaultLat,
@@ -223,126 +158,36 @@ class _MapScreenState extends State<MapScreen> {
         altitudeAccuracy: 0,
         headingAccuracy: 0,
       );
-      
-      _mapController.move(
-        LatLng(defaultLat, defaultLng),
-        13.0, // Zoom un peu plus éloigné pour voir plus de Paris
-      );
+      _mapController.move(LatLng(defaultLat, defaultLng), 13);
+      _isLoading = false;
     });
-    
-    // Charger les stations à proximité
-    _loadNearbyStations(defaultLat, defaultLng);
   }
 
-  /// Charger les stations à proximité
-  void _loadNearbyStations(double latitude, double longitude) {
-    Provider.of<ChargingStationProvider>(context, listen: false)
-        .fetchNearbyStations(latitude: latitude, longitude: longitude);
-  }
-
-  /// Afficher un dialogue pour guider l'utilisateur sur l'activation des permissions
-  Future<void> _showLocationPermissionDialog() {
-    final locationService = LocationService();
-    
-    return showDialog(
+  void _showLocationPermissionDialog() {
+    showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Permissions de localisation requises'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: const [
-                Text('Les permissions de localisation sont nécessaires pour afficher les bornes de recharge près de vous.'),
-                SizedBox(height: 10),
-                Text('Veuillez suivre ces étapes pour activer la localisation:'),
-                SizedBox(height: 10),
-                Text('1. Ouvrez les Paramètres de votre appareil'),
-                Text('2. Allez dans Applications > YapluCa'),
-                Text('3. Sélectionnez Autorisations > Localisation'),
-                Text('4. Activez l\'accès à la localisation'),
-                SizedBox(height: 10),
-                Text('Note: Sur certains appareils Android, vous devrez peut-être activer la localisation précise et l\'autorisation "Autoriser tout le temps" pour une meilleure expérience.'),
-              ],
-            ),
+      builder: (context) => AlertDialog(
+        title: const Text('Localisation requise'),
+        content: const Text('Activez la localisation dans les paramètres '),
+        actions: [
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () => Navigator.pop(context),
           ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Ouvrir les Paramètres de l\'application'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                locationService.openAppSettings();
-              },
-            ),
-            TextButton(
-              child: const Text('Ouvrir les Paramètres de localisation'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                locationService.openLocationSettings();
-              },
-            ),
-            TextButton(
-              child: const Text('Continuer sans localisation'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                // Utiliser une position par défaut
-                _useDefaultPosition();
-              },
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
-  void _onNavBarTap(int index) {
-    if (index != _currentIndex) {
-      setState(() {
-        _currentIndex = index;
-      });
-      
-      if (index == 0) {
-        Navigator.pushReplacementNamed(context, '/home');
-      } else if (index == 2) {
-        Navigator.pushReplacementNamed(context, AppRouter.qrScanner);
-      } else if (index == 3) {
-        Navigator.pushReplacementNamed(context, '/loans');
-      } else if (index == 4) {
-        Navigator.pushReplacementNamed(context, '/profile');
-      }
-    }
-  }
-
-  void _selectStation(ChargingStation station) {
-    setState(() {
-      _selectedStation = station;
-    });
-    
-    _mapController.move(
-      LatLng(station.latitude, station.longitude),
-      15.0,
-    );
-  }
-
-  void _clearSelectedStation() {
-    setState(() {
-      _selectedStation = null;
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
+  // TODO: Intégrer les appels API de https://apifox.com/apidoc/shared/4855b8fe-4c43-48f6-8bd6-37cc29b98fe5
+  // Exemple : récupérer les bornes et cabinets, créer les modèles et afficher sur la carte
 
   @override
   Widget build(BuildContext context) {
-    final stationProvider = Provider.of<ChargingStationProvider>(context);
-    final chargingProvider = Provider.of<ChargingProvider>(context);
-    final stations = stationProvider.nearbyStations;
-    final cabinets = chargingProvider.cabinets;
-    
+    final LatLng center = _currentPosition != null
+        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+        : const LatLng(48.8566, 2.3522);
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF373643),
@@ -359,7 +204,7 @@ class _MapScreenState extends State<MapScreen> {
           IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.white),
             onPressed: () {
-              // Afficher les notifications
+              // TODO: Afficher les notifications
             },
           ),
           IconButton(
@@ -374,7 +219,7 @@ class _MapScreenState extends State<MapScreen> {
       body: Stack(
         children: [
           _buildMap(),
-          
+
           // Barre de recherche
           Positioned(
             top: 16,
@@ -419,7 +264,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ),
           ),
-          
+
           // Détails de la station sélectionnée
           if (_selectedStation != null)
             Positioned(
@@ -504,31 +349,36 @@ class _MapScreenState extends State<MapScreen> {
                       children: [
                         Expanded(
                           child: PrimaryButton(
-                            text: 'Itinéraire',
-                            onPressed: () {
-                              // Afficher l'itinéraire
-                            },
+                            text: _isRouteLoading ? 'Chargement...' : 'Itinéraire',
+                            onPressed: _isRouteLoading ? null : () { _showRouteToStation(); },
                             height: 40,
                           ),
                         ),
+                        if (_routeError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(_routeError!, style: TextStyle(color: Colors.red)),
+                          ),
+                        if (_routePoints.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: TextButton(
+                              child: Text('Effacer l\'itinéraire'),
+                              onPressed: _clearRoute,
+                            ),
+                          ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: PrimaryButton(
-                            text: 'Réserver',
-                            onPressed: () {
-                              // Réserver une batterie
-                            },
-                            height: 40,
-                          ),
-                        ),
+                        
                       ],
                     ),
                   ],
                 ),
               ),
             ),
+
           
-          // Boutons de zoom et de localisation
+
+          // Boutons de zoom, style, recentrage
           Positioned(
             right: 16,
             bottom: 100,
@@ -558,22 +408,17 @@ class _MapScreenState extends State<MapScreen> {
                 const SizedBox(height: 8),
                 _buildMapControlButton(
                   icon: Icons.my_location,
-                  onPressed: () {
-                    _getCurrentLocation();
-                  },
+                  onPressed: _getCurrentLocation,
                 ),
                 const SizedBox(height: 8),
                 _buildMapControlButton(
                   icon: Icons.layers,
-                  onPressed: () {
-                    _showMapStyleSelector();
-                  },
+                  onPressed: _showMapStyleSelector,
                 ),
               ],
             ),
           ),
-          
-          // Indicateur de chargement de la localisation
+
           if (_isLoading)
             const Center(
               child: CircularProgressIndicator(
@@ -588,177 +433,241 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
   }
+    // === AJOUT : méthodes et variables privées manquantes ===
+  String _searchQuery = '';
+  bool _isRouteLoading = false;
+
+  void _clearSelectedStation() {
+    setState(() {
+      _selectedStation = null;
+    });
+  }
+
+  void _clearRoute() {
+    setState(() {
+      _routePoints = [];
+      _routeError = null;
+    });
+  }
+
+  Future<void> _showRouteToStation() async {
+    if (_currentPosition == null || _selectedStation == null) return;
+    setState(() {
+      _isRouteLoading = true;
+      _routeError = null;
+    });
+    try {
+      final start = _currentPosition!;
+      final end = _selectedStation!;
+      final apiKey = '5b3ce3597851110001cf624862699bc05cd54f5c9ca8520a053d9ac8';
+      final url = Uri.parse('https://api.openrouteservice.org/v2/directions/foot-walking?api_key=$apiKey&start=${start.longitude},${start.latitude}&end=${end.longitude},${end.latitude}');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final coords = data['features'][0]['geometry']['coordinates'] as List;
+        final points = coords.map<LatLng>((c) => LatLng(c[1], c[0])).toList();
+        setState(() {
+          _routePoints = points;
+          _isRouteLoading = false;
+        });
+        if (points.isNotEmpty) {
+          _mapController.move(points.first, 15.0);
+        }
+      } else {
+        setState(() {
+          _routeError = 'Erreur lors de la récupération de l\'itinéraire';
+          _isRouteLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _routeError = 'Erreur: $e';
+        _isRouteLoading = false;
+      });
+    }
+  }
 
   Widget _buildMap() {
     final stationProvider = Provider.of<ChargingStationProvider>(context);
     final chargingProvider = Provider.of<ChargingProvider>(context);
-    final stations = stationProvider.nearbyStations;
+    final stations = List<ChargingStation>.from(stationProvider.nearbyStations);
+// Ajout borne fictive pour test si aucune n'est trouvée
+if (stations.isEmpty && _currentPosition != null) {
+  stations.add(ChargingStation(
+    id: 'test-local',
+    name: 'Borne Test Locale',
+    // Borne test placée à ~300m au nord de l'utilisateur
+    latitude: _currentPosition!.latitude + 0.003,
+    longitude: _currentPosition!.longitude,
+    address: 'Autour de vous',
+    totalBatteries: 2,
+    availability: 1,
+    isOpen: true,
+    openingHours: null,
+    imageUrl: null,
+    distance: null,
+  ));
+}
+
     final cabinets = chargingProvider.cabinets;
-    
-    // Position par défaut (Paris)
-    final LatLng defaultPosition = LatLng(48.8566, 2.3522);
-    
-    // Position actuelle ou par défaut
-    final LatLng center = _currentPosition != null
+    final LatLng? userPosition = _currentPosition != null
         ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-        : defaultPosition;
-    
-    // Préparer les marqueurs de stations en dehors du build pour optimiser les performances
+        : null;
+
     final List<Marker> stationMarkers = [];
-    
-    // Ajouter les marqueurs pour les stations fictives
-    if (stations.isNotEmpty) {
-      for (final station in stations) {
+    for (final station in stations) {
+      stationMarkers.add(
+        Marker(
+          width: 40,
+          height: 40,
+          point: LatLng(station.latitude, station.longitude),
+          child: GestureDetector(
+            onTap: () => setState(() => _selectedStation = station),
+            child: Image.asset(
+              'assets/icons/energy.png',
+              width: 32,
+              height: 32,
+              color: station.availability > 0 ? AppColors.primaryColor : Colors.red,
+              colorBlendMode: BlendMode.modulate,
+            ),
+          ),
+        ),
+      );
+    }
+    for (final cabinet in cabinets) {
+      if (cabinet.latitude != null && cabinet.longitude != null) {
         stationMarkers.add(
           Marker(
-            width: 40.0,
-            height: 40.0,
-            point: LatLng(station.latitude, station.longitude),
+            width: 40,
+            height: 40,
+            point: LatLng(cabinet.latitude!, cabinet.longitude!),
             child: GestureDetector(
-              onTap: () => _selectStation(station),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.battery_charging_full,
-                  color: station.availability > 0
-                      ? AppColors.primaryColor
-                      : Colors.red,
-                  size: 24,
-                ),
+              onTap: () {
+                setState(() {
+                  _selectedStation = ChargingStation(
+                    id: cabinet.id ?? 'cabinet-${cabinet.hashCode}',
+                    name: cabinet.name ?? 'Borne',
+                    address: cabinet.address ?? 'Adresse inconnue',
+                    latitude: cabinet.latitude!,
+                    longitude: cabinet.longitude!,
+                    totalBatteries: cabinet.totalBatteries ?? cabinet.slots ?? 0,
+                    availability: cabinet.availableBatteries ?? cabinet.emptySlots ?? 0,
+                    isOpen: cabinet.isActive ?? cabinet.online ?? true,
+                    openingHours: '24h/24',
+                    imageUrl: '',
+                    distance: null,
+                  );
+                });
+              },
+              child: Image.asset(
+                'assets/icons/energy.png',
+                width: 28,
+                height: 28,
+                color: (cabinet.availableBatteries ?? 0) > 0 ? AppColors.primaryColor : Colors.red,
+                colorBlendMode: BlendMode.modulate,
               ),
             ),
           ),
         );
       }
     }
-    
-    // Ajouter les marqueurs pour les bornes réelles
-    if (cabinets.isNotEmpty) {
-      for (final cabinet in cabinets) {
-        // Vérifier si les coordonnées sont valides
-        if (cabinet.latitude != null && cabinet.longitude != null) {
-          final ChargingStation station = ChargingStation(
-            id: cabinet.id ?? 'cabinet-${cabinet.hashCode}',
-            name: cabinet.name ?? 'Borne ${cabinet.id ?? cabinet.hashCode}',
-            address: cabinet.address ?? 'Adresse non disponible',
-            latitude: cabinet.latitude!,
-            longitude: cabinet.longitude!,
-            totalBatteries: cabinet.totalBatteries ?? cabinet.slots ?? 0,
-            availability: cabinet.availableBatteries ?? cabinet.emptySlots ?? 0,
-            isOpen: cabinet.isActive ?? cabinet.online ?? true,
-            openingHours: '24h/24',
-            imageUrl: 'https://images.unsplash.com/photo-1565043589221-1a6fd9ae45c7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1074&q=80',
-            distance: _currentPosition != null
-                ? '${(Geolocator.distanceBetween(
-                  _currentPosition!.latitude,
-                  _currentPosition!.longitude,
-                  cabinet.latitude!,
-                  cabinet.longitude!,
-                ) / 1000).toStringAsFixed(1)} km' // Convertir en km
-                : null,
-          );
-          
-          stationMarkers.add(
-            Marker(
-              width: 40.0,
-              height: 40.0,
-              point: LatLng(cabinet.latitude!, cabinet.longitude!),
-              child: GestureDetector(
-                onTap: () => _selectStation(station),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.battery_charging_full,
-                    color: (cabinet.availableBatteries ?? 0) > 0
-                        ? AppColors.primaryColor
-                        : Colors.red,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-      }
-    }
-    
+
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCameraFit: CameraFit.bounds(
-          bounds: LatLngBounds(center, center),
-          maxZoom: 14.0,
-          minZoom: 14.0,
-        ),
-        maxZoom: 18.0,
-        minZoom: 3.0,
-        onTap: (_, __) {
-          // Désélectionner la station en cliquant ailleurs sur la carte
-          setState(() {
-            _selectedStation = null;
-          });
-        },
+        
+        
+        maxZoom: 20,
+        onTap: (_, __) => setState(() => _selectedStation = null),
       ),
       children: [
-        // Couche de tuiles de carte
         TileLayer(
-          urlTemplate: _mapStyles[_currentMapStyle],
-          subdomains: const ['a', 'b', 'c'],
-          userAgentPackageName: 'com.yapluca.app',
-          // Ajouter des options de mise en cache pour améliorer les performances
+          urlTemplate: _mapStyles[_currentMapStyle]!,
+          subdomains: ['a', 'b', 'c'],
+          additionalOptions: {'r': '@2x'},
           tileProvider: CachedNetworkTileProvider(),
+          maxZoom: 19,
+          retinaMode: true,
+          userAgentPackageName: 'com.yapluca.app',
         ),
-        
-        // Marqueur de position actuelle
-        if (_currentPosition != null)
+        if (userPosition != null)
           MarkerLayer(
             markers: [
               Marker(
-                width: 40.0,
-                height: 40.0,
-                point: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryColor.withOpacity(0.3),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.my_location,
-                    color: AppColors.primaryColor,
-                    size: 24,
-                  ),
+                width: 46,
+                height: 46,
+                point: userPosition,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Champ de vision (cône semi-transparent)
+                    if (_heading != null)
+                      Transform.rotate(
+                        angle: (_heading ?? 0) * (3.1415926535 / 180),
+                        child: CustomPaint(
+                          size: const Size(46, 46),
+                          painter: _VisionConePainter(),
+                        ),
+                      ),
+                    // Cercle de fond pour la position
+                    Icon(
+                      Icons.circle,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    // Point central
+                    Icon(
+                      Icons.circle,
+                      color: AppColors.primaryColor,
+                      size: 18,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        
-        // Couche de marqueurs pour toutes les stations
         MarkerLayer(markers: stationMarkers),
+        if (_routePoints.isNotEmpty)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: _routePoints,
+                color: Colors.blueAccent,
+                strokeWidth: 5.0,
+              ),
+            ],
+          ),
       ],
     );
   }
 
-  // Méthode pour construire un bouton de contrôle de la carte
+  Widget _buildRoutePolyline() {
+    return IgnorePointer(
+      child: Builder(
+        builder: (context) {
+          return FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              
+              
+            ),
+            children: [
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _routePoints,
+                    color: Colors.blueAccent,
+                    strokeWidth: 5.0,
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildMapControlButton({required IconData icon, required VoidCallback onPressed}) {
     return Container(
       width: 40,
@@ -783,7 +692,6 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // Méthode pour afficher le sélecteur de style de carte
   void _showMapStyleSelector() {
     showModalBottomSheet(
       context: context,
@@ -837,4 +745,50 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
   }
+
+  void _onNavBarTap(int index) {
+    if (index != _currentIndex) {
+      setState(() {
+        _currentIndex = index;
+      });
+      if (index == 0) {
+        Navigator.pushReplacementNamed(context, '/home');
+      } else if (index == 1) {
+        // On est déjà sur la map
+      } else if (index == 2) {
+        Navigator.pushReplacementNamed(context, AppRouter.qrScanner);
+      } else if (index == 3) {
+        Navigator.pushReplacementNamed(context, '/loans');
+      } else if (index == 4) {
+        Navigator.pushReplacementNamed(context, '/profile');
+      }
+    }
+  }
+  // === FIN AJOUT ===
 }
+
+class _VisionConePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = AppColors.primaryColor.withOpacity(0.25)
+      ..style = PaintingStyle.fill;
+    final double radius = size.width / 2;
+    final double angle = 60 * 3.1415926535 / 180; // 60° field of view
+    final Offset center = Offset(size.width / 2, size.height / 2);
+    final ui.Path path = ui.Path()
+      ..moveTo(center.dx, center.dy)
+      ..arcTo(
+        Rect.fromCircle(center: center, radius: radius),
+        -angle / 2 - 3.1415926535 / 2,
+        angle,
+        false,
+      )
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
+
