@@ -491,23 +491,6 @@ class _MapScreenState extends State<MapScreen> {
     final stationProvider = Provider.of<ChargingStationProvider>(context);
     final chargingProvider = Provider.of<ChargingProvider>(context);
     final stations = List<ChargingStation>.from(stationProvider.nearbyStations);
-// Ajout borne fictive pour test si aucune n'est trouvée
-if (stations.isEmpty && _currentPosition != null) {
-  stations.add(ChargingStation(
-    id: 'test-local',
-    name: 'Borne Test Locale',
-    // Borne test placée à ~300m au nord de l'utilisateur
-    latitude: _currentPosition!.latitude + 0.003,
-    longitude: _currentPosition!.longitude,
-    address: 'Autour de vous',
-    totalBatteries: 2,
-    availability: 1,
-    isOpen: true,
-    openingHours: null,
-    imageUrl: null,
-    distance: null,
-  ));
-}
 
     final cabinets = chargingProvider.cabinets;
     final LatLng? userPosition = _currentPosition != null
