@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'config/app_colors.dart';
 import 'config/app_theme.dart';
 import 'config/app_config.dart';
@@ -45,11 +44,6 @@ void main() async {
     );
 
     // ⚠️ Activation App Check Play Integrity : doit être juste après Firebase.initializeApp et AVANT tout autre code Firebase !
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.playIntegrity, // Token accepté par Firebase
-      appleProvider: AppleProvider.debug, // Laisse debug si tu ne testes pas sur iOS
-    );
-    print('Firebase App Check activé avec Play Integrity');
 
     isFirebaseAvailable = true;
     print('Firebase initialisé avec succès');
