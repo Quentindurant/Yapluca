@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
 import '../../routes/app_router.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/yapluca_logo.dart'; // Import YaplucaLogo
