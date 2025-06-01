@@ -150,7 +150,7 @@ class AppTheme {
     ),
     
     // Cartes
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: AppColors.cardBackground,
       elevation: cardElevation,
       shape: RoundedRectangleBorder(
