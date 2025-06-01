@@ -58,7 +58,8 @@ dependencies:
   permission_handler: ^11.3.1
 
   url_launcher: ^6.3.1
-  mobile_scanner: ^3.5.7
+  mobile_scanner:
+    path: ./mobile_scanner-develop
 
   flutter_stripe: ^9.5.0
   http: ^1.1.0
