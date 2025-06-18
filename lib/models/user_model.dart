@@ -7,6 +7,7 @@ class UserModel {
   final String? address;
   final double balance;
   final DateTime? createdAt;
+  final String? favoriteConnectorTypeId; // Ajouté pour gérer le connecteur favori utilisateur
 
   UserModel({
     required this.uid,
@@ -17,6 +18,7 @@ class UserModel {
     this.address,
     this.balance = 0.0,
     this.createdAt,
+    this.favoriteConnectorTypeId,
   });
 
   // Créer un UserModel à partir d'un Map (Firestore document)
@@ -32,6 +34,7 @@ class UserModel {
       createdAt: data['createdAt'] != null 
           ? (data['createdAt'] as dynamic).toDate() 
           : null,
+      favoriteConnectorTypeId: data['favoriteConnectorTypeId'],
     );
   }
 
@@ -45,6 +48,7 @@ class UserModel {
       'phoneNumber': phoneNumber,
       'address': address,
       'balance': balance,
+      'favoriteConnectorTypeId': favoriteConnectorTypeId,
       // Ne pas inclure createdAt lors de la mise à jour
     };
   }
@@ -58,6 +62,7 @@ class UserModel {
     String? phoneNumber,
     String? address,
     double? balance,
+    String? favoriteConnectorTypeId,
     DateTime? createdAt,
   }) {
     return UserModel(

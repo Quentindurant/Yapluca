@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 
 class AuthProvider with ChangeNotifier {
+  Future<void> updateFavoriteConnectorType(String? connectorTypeId) async {
+    if (_user == null) return;
+    _user = _user!.copyWith(favoriteConnectorTypeId: connectorTypeId);
+    await FirebaseFirestore.instance.collection('users').doc(_user!.uid).update({
+      'favoriteConnectorTypeId': connectorTypeId,
+    });
+    notifyListeners();
+  }
   final AuthService _authService = AuthService();
   
   bool _isLoading = false;

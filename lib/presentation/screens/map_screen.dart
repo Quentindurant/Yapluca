@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,8 @@ import 'dart:ui' as ui;
 
 import '../../config/app_colors.dart';
 import '../../models/charging_station.dart';
+import '../../models/connector_type.dart';
+import '../../services/connector_type_service.dart';
 import '../../providers/charging_station_provider.dart';
 import '../../data/providers/charging_provider.dart';
 import '../../data/services/location_service.dart';
@@ -59,24 +62,12 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
+////////////////////////////////////// Connector ////////////////////////////////////////
 class _MapScreenState extends State<MapScreen> {
+  List<ConnectorType> _connectorTypes = [];
+  Map<String, String> _connectorIcons = {}; // id -> icon path
+
   double? _heading;
-  @override
-  void initState() {
-    super.initState();
-    FlutterCompass.events?.listen((event) {
-      setState(() {
-        _heading = event.heading;
-      });
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!context.checkAuth()) return;
-      await _askLocationPermission();
-      await _getCurrentLocation();
-      Provider.of<ChargingStationProvider>(context, listen: false).fetchNearbyStations();
-      Provider.of<ChargingProvider>(context, listen: false).fetchCabinets();
-    });
-  }
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
 
@@ -97,7 +88,21 @@ class _MapScreenState extends State<MapScreen> {
     'watercolor': 'https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',
   };
 
-  
+  @override
+  void initState() {
+    super.initState();
+    _askLocationPermission();
+    _getCurrentLocation();
+    _loadConnectorTypes();
+  }
+
+  Future<void> _loadConnectorTypes() async {
+    final types = await ConnectorTypeService().getConnectorTypes();
+    setState(() {
+      _connectorTypes = types;
+      _connectorIcons = {for (var t in types) t.id: t.icon};
+    });
+  }
 
   Future<void> _askLocationPermission() async {
     final status = await Permission.location.request();
@@ -490,7 +495,122 @@ class _MapScreenState extends State<MapScreen> {
   Widget _buildMap() {
     final stationProvider = Provider.of<ChargingStationProvider>(context);
     final chargingProvider = Provider.of<ChargingProvider>(context);
-    final stations = List<ChargingStation>.from(stationProvider.nearbyStations);
+    // === Bornes de test en dur (mode démo) ===
+    final demoStations = [
+      ChargingStation(
+        id: 'station-republique',
+        name: 'Station République',
+        latitude: 48.867,
+        longitude: 2.363,
+        totalBatteries: 5,
+        availability: 3,
+        isOpen: true,
+        address: 'Place de la République, Paris',
+        connectorTypeId: 'USB-C',
+      ),
+      ChargingStation(
+        id: 'station-gare-lyon',
+        name: 'Station Gare de Lyon',
+        latitude: 48.844,
+        longitude: 2.373,
+        totalBatteries: 4,
+        availability: 2,
+        isOpen: true,
+        address: 'Gare de Lyon, Paris',
+        connectorTypeId: 'lightning',
+      ),
+      ChargingStation(
+        id: 'station-montparnasse',
+        name: 'Station Montparnasse',
+        latitude: 48.841,
+        longitude: 2.320,
+        totalBatteries: 3,
+        availability: 1,
+        isOpen: true,
+        address: 'Gare Montparnasse, Paris',
+        connectorTypeId: 'unknow',
+      ),
+      ChargingStation(
+        id: 'station-bastille',
+        name: 'Station Bastille',
+        latitude: 48.853,
+        longitude: 2.369,
+        totalBatteries: 6,
+        availability: 4,
+        isOpen: true,
+        address: 'Place de la Bastille, Paris',
+        connectorTypeId: 'USB-C',
+      ),
+      ChargingStation(
+        id: 'station-opera',
+        name: 'Station Opéra',
+        latitude: 48.870,
+        longitude: 2.332,
+        totalBatteries: 4,
+        availability: 2,
+        isOpen: true,
+        address: 'Opéra Garnier, Paris',
+        connectorTypeId: 'lightning',
+      ),
+      ChargingStation(
+        id: 'station-chatelet',
+        name: 'Station Châtelet',
+        latitude: 48.858,
+        longitude: 2.347,
+        totalBatteries: 5,
+        availability: 3,
+        isOpen: true,
+        address: 'Châtelet, Paris',
+        connectorTypeId: 'USB-C',
+      ),
+      ChargingStation(
+        id: 'station-nation',
+        name: 'Station Nation',
+        latitude: 48.848,
+        longitude: 2.395,
+        totalBatteries: 2,
+        availability: 1,
+        isOpen: true,
+        address: 'Place de la Nation, Paris',
+        connectorTypeId: 'unknow',
+      ),
+      ChargingStation(
+        id: 'station-trocadero',
+        name: 'Station Trocadéro',
+        latitude: 48.863,
+        longitude: 2.288,
+        totalBatteries: 3,
+        availability: 2,
+        isOpen: true,
+        address: 'Trocadéro, Paris',
+        connectorTypeId: 'lightning',
+      ),
+      ChargingStation(
+        id: 'station-bnf',
+        name: 'Station BNF',
+        latitude: 48.833,
+        longitude: 2.376,
+        totalBatteries: 7,
+        availability: 5,
+        isOpen: true,
+        address: 'Bibliothèque François Mitterrand, Paris',
+        connectorTypeId: 'USB-C',
+      ),
+      ChargingStation(
+        id: 'station-defense',
+        name: 'Station La Défense',
+        latitude: 48.892,
+        longitude: 2.236,
+        totalBatteries: 6,
+        availability: 3,
+        isOpen: true,
+        address: 'La Défense, Paris',
+        connectorTypeId: 'lightning',
+      ),
+      // Ajoute d'autres bornes si besoin...
+    ];
+    // Correction : affiche TOUJOURS toutes les bornes de test, sans filtrage
+    final stations = [...demoStations, ...stationProvider.nearbyStations];
 
     final cabinets = chargingProvider.cabinets;
     final LatLng? userPosition = _currentPosition != null
@@ -499,6 +619,9 @@ class _MapScreenState extends State<MapScreen> {
 
     final List<Marker> stationMarkers = [];
     for (final station in stations) {
+      // Sélectionne l'icône selon le type de connecteur (fallback si inconnu)
+      final connectorIcon = _connectorIcons[station.connectorTypeId?.toLowerCase() ?? ''] ??
+          'assets/icons/energy.png';
       stationMarkers.add(
         Marker(
           width: 40,
@@ -507,7 +630,7 @@ class _MapScreenState extends State<MapScreen> {
           child: GestureDetector(
             onTap: () => setState(() => _selectedStation = station),
             child: Image.asset(
-              'assets/icons/energy.png',
+              connectorIcon,
               width: 32,
               height: 32,
               color: station.availability > 0 ? AppColors.primaryColor : Colors.red,

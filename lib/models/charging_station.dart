@@ -10,6 +10,7 @@ class ChargingStation {
   final String? openingHours;
   final String? imageUrl;
   final String? distance;
+  final String? connectorTypeId;
 
   ChargingStation({
     required this.id,
@@ -23,6 +24,7 @@ class ChargingStation {
     this.openingHours,
     this.imageUrl,
     this.distance,
+    this.connectorTypeId,
   });
 
   factory ChargingStation.fromJson(Map<String, dynamic> json) {
@@ -38,6 +40,7 @@ class ChargingStation {
       openingHours: json['openingHours'],
       imageUrl: json['imageUrl'],
       distance: json['distance'],
+      connectorTypeId: json['connectorTypeId'],
     );
   }
 
@@ -54,6 +57,7 @@ class ChargingStation {
       'openingHours': openingHours,
       'imageUrl': imageUrl,
       'distance': distance,
+      'connectorTypeId': connectorTypeId,
     };
   }
 }

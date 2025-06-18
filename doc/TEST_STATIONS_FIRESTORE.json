@@ -1,0 +1,26 @@
+[
+  {
+    "id": "station-republique",
+    "name": "Station République",
+    "latitude": 48.867,
+    "longitude": 2.363,
+    "connectorTypeId": "USB-C",
+    "description": "Borne test USB-C au centre de Paris"
+  },
+  {
+    "id": "station-gare-lyon",
+    "name": "Station Gare de Lyon",
+    "latitude": 48.844,
+    "longitude": 2.373,
+    "connectorTypeId": "lightning",
+    "description": "Borne test Lightning à la gare de Lyon"
+  },
+  {
+    "id": "station-montparnasse",
+    "name": "Station Montparnasse",
+    "latitude": 48.841,
+    "longitude": 2.320,
+    "connectorTypeId": "unknow",
+    "description": "Borne test Micro-USB à Montparnasse"
+  }
+]

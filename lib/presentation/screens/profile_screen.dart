@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:yapluca_migration/config/app_colors.dart';
 import 'package:yapluca_migration/providers/auth_provider.dart' as app_provider;
 import 'package:yapluca_migration/presentation/widgets/bottom_nav_bar.dart';
-// import 'package:yapluca_migration/presentation/widgets/primary_button.dart'; // Paiement désactivé
+import 'package:yapluca_migration/presentation/widgets/connector_type_selector.dart';
 import 'package:yapluca_migration/presentation/widgets/yapluca_logo.dart';
+import '../../services/connector_type_service.dart';
+import '../../models/connector_type.dart';
 import 'terms_conditions_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../routes/app_router.dart'; // Correction du chemin d'import AppRouter
@@ -206,6 +208,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   value: user.createdAt != null
                                       ? '${user.createdAt!.day}/${user.createdAt!.month}/${user.createdAt!.year}'
                                       : 'Date inconnue',
+                                ),
+                                const SizedBox(height: 20),
+                                FutureBuilder<List<ConnectorType>>(
+                                  future: ConnectorTypeService().getConnectorTypes(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState == ConnectionState.waiting) {
+                                      return const Center(child: CircularProgressIndicator());
+                                    }
+                                    if (snapshot.hasError) {
+                                      return Text('Erreur de chargement des types de connecteurs');
+                                    }
+                                    final connectorTypes = snapshot.data ?? [];
+                                    return ConnectorTypeSelector(
+                                      connectorTypes: connectorTypes,
+                                      selectedId: user.favoriteConnectorTypeId,
+                                      onChanged: (newId) async {
+                                        final authProvider = Provider.of<app_provider.AuthProvider>(context, listen: false);
+                                        await authProvider.updateFavoriteConnectorType(newId);
+                                        if (mounted) {
+                                          setState(() {});
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Connecteur favori mis à jour !')),
+                                          );
+                                        }
+                                      },
+                                      showNone: true,
+                                    );
+                                  },
                                 ),
                               ],
                             ),

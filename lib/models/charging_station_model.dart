@@ -11,6 +11,7 @@ class ChargingStationModel {
   final String status; // 'active', 'maintenance', 'inactive'
   final double? rating;
   final DateTime? lastUpdated;
+  final String? connectorTypeId; // Ajout du type de connecteur
 
   ChargingStationModel({
     required this.id,
@@ -22,6 +23,7 @@ class ChargingStationModel {
     required this.status,
     this.rating,
     this.lastUpdated,
+    this.connectorTypeId,
   });
 
   // Convertir en LatLng pour Flutter Map (OpenStreetMap)
@@ -47,6 +49,7 @@ class ChargingStationModel {
       lastUpdated: data['lastUpdated'] != null 
           ? (data['lastUpdated'] as Timestamp).toDate() 
           : null,
+      connectorTypeId: data['connectorTypeId'],
     );
   }
 
@@ -58,6 +61,7 @@ class ChargingStationModel {
       'location': location,
       'totalBatteries': totalBatteries,
       'availableBatteries': availableBatteries,
+      'connectorTypeId': connectorTypeId,
       'status': status,
       'rating': rating,
       'lastUpdated': FieldValue.serverTimestamp(),
